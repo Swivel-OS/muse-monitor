@@ -1,0 +1,26 @@
+# Node
+node_modules/
+npm-debug.log*
+package-lock.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+.venv/
+env/
+
+# Logs & runtime
+*.log
+*.pid
+*.pids
+/tmp/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Screenshot (added by user)
+# screenshot.png — intentionally not ignored so JP can commit it

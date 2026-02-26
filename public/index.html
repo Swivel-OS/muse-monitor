@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>🧠 Muse Monitor — Fleet EEG</title>
+<style>
+/* ── Base ──────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:         #0D1A24;
+  --bg2:        #121F2B;
+  --gold:       #D4A84B;
+  --teal:       #3AAFAF;
+  --text:       #C8D8E4;
+  --text-dim:   #4A6070;
+  --state-clr:  var(--teal);
+}
+
+html, body {
+  width: 100%; height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* ── Background canvas ─────────────────────────────────────────────── */
+#bg-canvas {
+  position: fixed; inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* ── Layout ────────────────────────────────────────────────────────── */
+#app {
+  position: relative; z-index: 1;
+  width: 100%; height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  grid-template-areas: "topbar" "main" "history";
+}
+
+/* ── Top bar ───────────────────────────────────────────────────────── */
+#topbar {
+  grid-area: topbar;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 28px 0;
+}
+
+.logo {
+  font-size: 13px; font-weight: 600; letter-spacing: 0.15em;
+  color: var(--text-dim); text-transform: uppercase;
+}
+
+.vibe-modes {
+  display: flex; gap: 8px;
+}
+
+.vibe-btn {
+  padding: 6px 18px;
+  border: 1px solid var(--text-dim);
+  border-radius: 20px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: all 0.25s;
+  text-transform: uppercase;
+}
+.vibe-btn:hover { border-color: var(--state-clr); color: var(--state-clr); }
+.vibe-btn.active {
+  border-color: var(--state-clr);
+  background: color-mix(in srgb, var(--state-clr) 15%, transparent);
+  color: var(--state-clr);
+}
+
+#fullscreen-btn {
+  padding: 6px 10px;
+  border: 1px solid var(--text-dim);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-left: 16px;
+}
+#fullscreen-btn:hover { border-color: var(--state-clr); color: var(--state-clr); }
+
+/* ── Main area ─────────────────────────────────────────────────────── */
+#main {
+  grid-area: main;
+  display: flex; align-items: center; justify-content: center;
+  gap: 80px;
+  padding: 20px 60px;
+}
+
+/* ── State display ─────────────────────────────────────────────────── */
+#state-center {
+  display: flex; flex-direction: column; align-items: center;
+  flex: 0 0 auto;
+  text-align: center;
+}
+
+#state-emoji {
+  font-size: 96px;
+  line-height: 1;
+  margin-bottom: 20px;
+  filter: drop-shadow(0 0 30px var(--state-clr));
+  transition: filter 1s;
+  animation: pulse-emoji 3s ease-in-out infinite;
+}
+@keyframes pulse-emoji {
+  0%, 100% { transform: scale(1); }
+  50%       { transform: scale(1.05); }
+}
+
+#state-label {
+  font-size: 56px; font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--state-clr);
+  text-shadow: 0 0 40px color-mix(in srgb, var(--state-clr) 40%, transparent);
+  transition: color 0.8s, text-shadow 0.8s;
+}
+
+#state-detail {
+  margin-top: 12px;
+  font-size: 15px;
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+  font-weight: 400;
+  min-height: 22px;
+}
+
+#state-ts {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+  letter-spacing: 0.08em;
+  opacity: 0.5;
+}
+
+/* ── Band bars ─────────────────────────────────────────────────────── */
+#bands {
+  display: flex; flex-direction: column; gap: 20px;
+  flex: 0 0 320px;
+}
+
+.band-row {
+  display: flex; flex-direction: column; gap: 6px;
+}
+.band-meta {
+  display: flex; justify-content: space-between;
+  font-size: 12px; font-weight: 600; letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.band-name { color: var(--text-dim); }
+.band-val  { color: var(--text); transition: color 0.5s; }
+
+.bar-track {
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.06);
+  overflow: hidden;
+}
+.bar-fill {
+  height: 100%; border-radius: 4px;
+  background: var(--state-clr);
+  width: 0%;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1),
+              background 0.8s;
+  box-shadow: 0 0 8px color-mix(in srgb, var(--state-clr) 50%, transparent);
+}
+
+/* Band-specific accent colors */
+.bar-fill.delta    { background: #6B8EAD; box-shadow: 0 0 8px #6B8EAD44; }
+.bar-fill.theta    { background: #A78BFA; box-shadow: 0 0 8px #A78BFA44; }
+.bar-fill.alpha    { background: var(--teal); box-shadow: 0 0 8px #3AAFAF44; }
+.bar-fill.beta_low { background: var(--gold); box-shadow: 0 0 8px #D4A84B44; }
+.bar-fill.beta_high{ background: #FF6B6B; box-shadow: 0 0 8px #FF6B6B44; }
+
+/* ── History ───────────────────────────────────────────────────────── */
+#history {
+  grid-area: history;
+  padding: 16px 36px 24px;
+  border-top: 1px solid rgba(255,255,255,0.05);
+  display: flex; align-items: center; gap: 0;
+  min-height: 62px;
+}
+
+.history-label {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.12em;
+  color: var(--text-dim); text-transform: uppercase;
+  margin-right: 20px;
+  white-space: nowrap;
+}
+
+#history-list {
+  display: flex; gap: 10px;
+  overflow: hidden;
+  flex: 1;
+}
+
+.h-chip {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 14px;
+  border-radius: 20px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  font-size: 12px;
+  white-space: nowrap;
+  animation: fade-in-chip 0.4s ease;
+}
+@keyframes fade-in-chip {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.h-chip .h-ts   { color: var(--text-dim); font-size: 10px; }
+.h-chip .h-name { font-weight: 600; color: var(--text); }
+
+/* ── Connection overlay ────────────────────────────────────────────── */
+#connecting {
+  position: fixed; inset: 0; z-index: 100;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  background: var(--bg);
+  gap: 16px;
+  transition: opacity 0.5s;
+}
+#connecting.hidden { opacity: 0; pointer-events: none; }
+
+.spinner {
+  width: 48px; height: 48px;
+  border: 3px solid rgba(58,175,175,0.2);
+  border-top-color: var(--teal);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.conn-label {
+  font-size: 14px; color: var(--text-dim);
+  letter-spacing: 0.08em; text-transform: uppercase;
+}
+
+/* ── Error banner ──────────────────────────────────────────────────── */
+#error-banner {
+  position: fixed; bottom: 80px; left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255,107,107,0.15);
+  border: 1px solid rgba(255,107,107,0.4);
+  color: #FF6B6B;
+  padding: 10px 24px;
+  border-radius: 8px;
+  font-size: 13px;
+  z-index: 50;
+  display: none;
+}
+
+/* ── Vibe mode palettes (override --state-clr) ─────────────────────── */
+.vibe-focus    { --state-clr: #3AAFAF; }
+.vibe-meditate { --state-clr: #A78BFA; }
+.vibe-creative { --state-clr: #C084FC; }
+.vibe-hype     { --state-clr: #D4A84B; }
+
+</style>
+</head>
+<body class="vibe-focus">
+
+<canvas id="bg-canvas"></canvas>
+
+<div id="connecting">
+  <div class="spinner"></div>
+  <div class="conn-label">Connecting to MUSE stream…</div>
+</div>
+
+<div id="error-banner"></div>
+
+<div id="app">
+  <!-- Top bar -->
+  <div id="topbar">
+    <div class="logo">🧠 Muse Monitor</div>
+    <div class="vibe-modes">
+      <button class="vibe-btn active" data-vibe="focus">Focus</button>
+      <button class="vibe-btn" data-vibe="meditate">Meditate</button>
+      <button class="vibe-btn" data-vibe="creative">Creative</button>
+      <button class="vibe-btn" data-vibe="hype">Hype</button>
+    </div>
+    <button id="fullscreen-btn" title="Fullscreen">⛶</button>
+  </div>
+
+  <!-- Main -->
+  <div id="main">
+    <div id="state-center">
+      <div id="state-emoji">🧠</div>
+      <div id="state-label">WAITING</div>
+      <div id="state-detail">Waiting for EEG data…</div>
+      <div id="state-ts"></div>
+    </div>
+
+    <div id="bands">
+      <div class="band-row" id="band-alpha">
+        <div class="band-meta">
+          <span class="band-name">Alpha <span style="opacity:0.5;font-size:10px">8–13Hz</span></span>
+          <span class="band-val">—</span>
+        </div>
+        <div class="bar-track"><div class="bar-fill alpha"></div></div>
+      </div>
+      <div class="band-row" id="band-theta">
+        <div class="band-meta">
+          <span class="band-name">Theta <span style="opacity:0.5;font-size:10px">4–8Hz</span></span>
+          <span class="band-val">—</span>
+        </div>
+        <div class="bar-track"><div class="bar-fill theta"></div></div>
+      </div>
+      <div class="band-row" id="band-beta_low">
+        <div class="band-meta">
+          <span class="band-name">Beta Low <span style="opacity:0.5;font-size:10px">13–20Hz</span></span>
+          <span class="band-val">—</span>
+        </div>
+        <div class="bar-track"><div class="bar-fill beta_low"></div></div>
+      </div>
+      <div class="band-row" id="band-beta_high">
+        <div class="band-meta">
+          <span class="band-name">Beta High <span style="opacity:0.5;font-size:10px">20–30Hz</span></span>
+          <span class="band-val">—</span>
+        </div>
+        <div class="bar-track"><div class="bar-fill beta_high"></div></div>
+      </div>
+      <div class="band-row" id="band-delta">
+        <div class="band-meta">
+          <span class="band-name">Delta <span style="opacity:0.5;font-size:10px">1–4Hz</span></span>
+          <span class="band-val">—</span>
+        </div>
+        <div class="bar-track"><div class="bar-fill delta"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- History -->
+  <div id="history">
+    <div class="history-label">History</div>
+    <div id="history-list"></div>
+  </div>
+</div>
+
+<script>
+// ── Config ───────────────────────────────────────────────────────────
+const STATE_META = {
+  FLOW:     { emoji: "🌊", desc: "Alpha dominant — deep focus, don't interrupt" },
+  STRESS:   { emoji: "⚡", desc: "High Beta — stress spike detected" },
+  CREATIVE: { emoji: "🎨", desc: "Theta dominant — creative & ideation mode" },
+  ACTIVE:   { emoji: "⚙️", desc: "Low Beta — active thinking, normal state" },
+  UNKNOWN:  { emoji: "❓", desc: "No dominant band — signal unclear" },
+};
+
+const VIBE_LABELS = {
+  focus:    "FOCUS",
+  meditate: "MEDITATE",
+  creative: "CREATIVE",
+  hype:     "HYPE",
+};
+
+// ── State ────────────────────────────────────────────────────────────
+let currentVibe = "focus";
+let stateHistory = [];  // last 10
+let lastState    = null;
+
+// ── DOM refs ─────────────────────────────────────────────────────────
+const connecting   = document.getElementById("connecting");
+const errorBanner  = document.getElementById("error-banner");
+const emojiEl      = document.getElementById("state-emoji");
+const labelEl      = document.getElementById("state-label");
+const detailEl     = document.getElementById("state-detail");
+const tsEl         = document.getElementById("state-ts");
+const historyList  = document.getElementById("history-list");
+
+// ── Background canvas — ambient mycelium network ─────────────────────
+(function initBg() {
+  const canvas = document.getElementById("bg-canvas");
+  const ctx    = canvas.getContext("2d");
+  let W, H, nodes = [];
+
+  const NODE_COUNT = 60;
+  const CONNECT_DIST = 160;
+
+  function resize() {
+    W = canvas.width  = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+  }
+
+  function mkNode() {
+    return {
+      x: Math.random() * W,
+      y: Math.random() * H,
+      vx: (Math.random() - 0.5) * 0.18,
+      vy: (Math.random() - 0.5) * 0.18,
+      r: Math.random() * 1.5 + 0.5,
+    };
+  }
+
+  function getStateColor() {
+    const styles = getComputedStyle(document.body);
+    return styles.getPropertyValue("--state-clr").trim() || "#3AAFAF";
+  }
+
+  function hexToRgb(hex) {
+    hex = hex.replace("#", "");
+    if (hex.length === 3) hex = hex.split("").map(c => c+c).join("");
+    const n = parseInt(hex, 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    const color = getStateColor();
+    let [r, g, b] = hexToRgb(color);
+
+    for (let i = 0; i < nodes.length; i++) {
+      const a = nodes[i];
+      a.x += a.vx; a.y += a.vy;
+      if (a.x < 0 || a.x > W) a.vx *= -1;
+      if (a.y < 0 || a.y > H) a.vy *= -1;
+
+      for (let j = i + 1; j < nodes.length; j++) {
+        const b_ = nodes[j];
+        const dx = a.x - b_.x, dy = a.y - b_.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist < CONNECT_DIST) {
+          const alpha = (1 - dist / CONNECT_DIST) * 0.12;
+          ctx.strokeStyle = `rgba(${r},${g},${b},${alpha})`;
+          ctx.lineWidth = 0.6;
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b_.x, b_.y);
+          ctx.stroke();
+        }
+      }
+
+      ctx.fillStyle = `rgba(${r},${g},${b},0.25)`;
+      ctx.beginPath();
+      ctx.arc(a.x, a.y, a.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    requestAnimationFrame(draw);
+  }
+
+  window.addEventListener("resize", () => { resize(); nodes = Array.from({length: NODE_COUNT}, mkNode); });
+  resize();
+  nodes = Array.from({length: NODE_COUNT}, mkNode);
+  draw();
+})();
+
+// ── UI updates ───────────────────────────────────────────────────────
+function updateState(payload) {
+  const { state, emoji, detail, powers, ts } = payload;
+  const meta = STATE_META[state] || STATE_META.UNKNOWN;
+
+  emojiEl.textContent  = emoji || meta.emoji;
+  labelEl.textContent  = state;
+  detailEl.textContent = detail || meta.desc;
+  tsEl.textContent     = ts || "";
+
+  // Update history
+  if (lastState !== state) {
+    stateHistory.unshift({ state, emoji: emoji || meta.emoji, ts: ts || new Date().toLocaleTimeString("en-US", {hour12:false,hour:"2-digit",minute:"2-digit"}) });
+    if (stateHistory.length > 10) stateHistory.pop();
+    renderHistory();
+    lastState = state;
+  }
+
+  // Update band bars
+  const bands = ["alpha", "theta", "beta_low", "beta_high", "delta"];
+  for (const band of bands) {
+    const val = powers?.[band] ?? 0;
+    const pct = Math.min(100, Math.round(val * 100));
+    const row  = document.getElementById(`band-${band}`);
+    if (!row) continue;
+    row.querySelector(".bar-fill").style.width = pct + "%";
+    row.querySelector(".band-val").textContent  = pct + "%";
+  }
+}
+
+function renderHistory() {
+  historyList.innerHTML = stateHistory
+    .map(h => `
+      <div class="h-chip">
+        <span>${h.emoji}</span>
+        <span class="h-name">${h.state}</span>
+        <span class="h-ts">${h.ts}</span>
+      </div>`)
+    .join("");
+}
+
+// ── Vibe mode ────────────────────────────────────────────────────────
+document.querySelectorAll(".vibe-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const vibe = btn.dataset.vibe;
+    currentVibe = vibe;
+    document.body.className = `vibe-${vibe}`;
+    document.querySelectorAll(".vibe-btn").forEach(b => b.classList.toggle("active", b === btn));
+  });
+});
+
+// ── Fullscreen ───────────────────────────────────────────────────────
+document.getElementById("fullscreen-btn").addEventListener("click", () => {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen().catch(() => {});
+  } else {
+    document.exitFullscreen();
+  }
+});
+
+// ── WebSocket ────────────────────────────────────────────────────────
+let ws, reconnectTimer;
+
+function connect() {
+  const url = `ws://${location.host}/ws`;
+  ws = new WebSocket(url);
+
+  ws.onopen = () => {
+    clearTimeout(reconnectTimer);
+    connecting.classList.add("hidden");
+    errorBanner.style.display = "none";
+    console.log("[ws] connected");
+  };
+
+  ws.onmessage = (ev) => {
+    try {
+      const data = JSON.parse(ev.data);
+      if (data.type === "state") updateState(data);
+      else if (data.type === "error") showError(data.message);
+    } catch (_) {}
+  };
+
+  ws.onclose = ws.onerror = () => {
+    connecting.classList.remove("hidden");
+    reconnectTimer = setTimeout(connect, 2000);
+  };
+}
+
+function showError(msg) {
+  errorBanner.textContent = "⚠️ " + msg;
+  errorBanner.style.display = "block";
+  setTimeout(() => { errorBanner.style.display = "none"; }, 8000);
+}
+
+connect();
+</script>
+</body>
+</html>
