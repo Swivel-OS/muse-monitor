@@ -31,7 +31,7 @@ Node deps install automatically on first launch.
 ## Install & run
 
 ```bash
-git clone https://github.com/architectjp/muse-monitor
+git clone https://github.com/Swivel-OS/muse-monitor
 cd muse-monitor
 bash start.sh
 ```
