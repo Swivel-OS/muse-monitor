@@ -4,7 +4,7 @@
 
 Real-time EEG brain state dashboard for the MUSE 2 headband. Classifies your mental state live — Flow, Stress, Creative, Active — and streams it to a full-screen ambient display. Built to run on a TV via AirPlay or Chromecast while you work.
 
-![screenshot](screenshot.png)
+![Muse Monitor Dashboard](screenshot.png)
 
 ---
 
